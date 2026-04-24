@@ -1,15 +1,46 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Leaf, MapPin, Phone, ArrowRight, Sparkles, RotateCcw } from 'lucide-react';
+import { Leaf, MapPin, Phone, ArrowRight, Sparkles, RotateCcw, Loader2 } from 'lucide-react';
 import { DinoResult, dinoProfiles, questions } from './data';
 
-type GameState = 'intro' | 'quiz' | 'analyzing' | 'result' | 'gift';
+type GameState = 'intro' | 'quiz' | 'analyzing' | 'result' | 'roulette' | 'gift';
 
 export default function App() {
   const [gameState, setGameState] = useState<GameState>('intro');
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [scores, setScores] = useState<Record<string, number>>({});
   const [resultId, setResultId] = useState<DinoResult | null>(null);
+  const [prize, setPrize] = useState<string>('');
+
+  const [imagesLoaded, setImagesLoaded] = useState(0);
+  const [totalImages, setTotalImages] = useState(0);
+
+  // Preload images on mount
+  useEffect(() => {
+    const urls = [
+      ...questions.map(q => q.imageUrl).filter(Boolean),
+      ...Object.values(dinoProfiles).map(p => p.imageUrl).filter(Boolean)
+    ] as string[];
+    
+    setTotalImages(urls.length);
+
+    let loadedCount = 0;
+    
+    urls.forEach(url => {
+      const img = new Image();
+      img.onload = () => {
+        loadedCount++;
+        setImagesLoaded(loadedCount);
+      };
+      img.onerror = () => {
+        loadedCount++;
+        setImagesLoaded(loadedCount);
+      };
+      img.src = url;
+    });
+  }, []);
+
+  const isLoaded = totalImages > 0 && imagesLoaded >= totalImages;
 
   const handleStart = () => {
     setGameState('quiz');
@@ -84,15 +115,24 @@ export default function App() {
             <div key="result">
               <ResultScreen 
                 result={resultId} 
-                onGetGift={() => setGameState('gift')} 
+                onGetGift={() => setGameState('roulette')} 
                 onRestart={handleStart}
               />
             </div>
           )}
 
+          {gameState === 'roulette' && (
+            <div key="roulette">
+              <RouletteScreen onFinish={(p) => {
+                setPrize(p);
+                setGameState('gift');
+              }} />
+            </div>
+          )}
+
           {gameState === 'gift' && (
             <div key="gift">
-              <GiftScreen onRestart={handleStart} />
+              <GiftScreen prize={prize} onRestart={handleStart} />
             </div>
           )}
         </AnimatePresence>
@@ -101,7 +141,11 @@ export default function App() {
   );
 }
 
-function IntroScreen({ onStart }: { onStart: () => void }) {
+function IntroScreen({ 
+  onStart
+}: { 
+  onStart: () => void;
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -109,12 +153,12 @@ function IntroScreen({ onStart }: { onStart: () => void }) {
       exit={{ opacity: 0, y: -20 }}
       className="bg-n-card rounded-[24px] p-8 sm:p-12 shadow-[0_10px_30px_rgba(0,0,0,0.05)] border-2 border-n-primary flex flex-col items-center text-center"
     >
-      <div className="font-serif text-2xl font-black text-n-primary mb-6 tracking-tight uppercase">DINOPOLIS</div>
+      <div className="font-serif text-2xl font-black text-n-primary mb-6 tracking-tight uppercase">ДИНОПОЛИС</div>
       <h1 className="text-4xl sm:text-5xl font-serif font-black text-n-primary mb-4 leading-tight">
         Какой ты <br /> динозавр?
       </h1>
       <p className="text-n-text opacity-80 mb-8 max-w-sm">
-        Пройди тест из 7 вопросов, узнай свой дино-характер и получи гарантированный подарок от парка «Динополис»!
+        Пройди тест из 7 вопросов, узнай свой дино-характер и получи гарантированный подарок от парка «ДИНОПОЛИС»!
       </p>
       <button
         onClick={onStart}
@@ -161,6 +205,13 @@ function QuizScreen({
       </div>
 
       <div className="mb-8 p-2">
+        {q.imageUrl && (
+          <img 
+            src={q.imageUrl} 
+            alt="Иллюстрация к вопросу" 
+            className="w-full h-48 sm:h-64 object-cover rounded-2xl border-2 border-n-primary mb-6 shadow-[0_5px_15px_rgba(0,0,0,0.05)]" 
+          />
+        )}
         <h2 className="text-3xl font-serif font-bold text-n-primary leading-tight">
           {q.question}
         </h2>
@@ -228,9 +279,17 @@ function ResultScreen({
       </h2>
       
       <div className="flex flex-col sm:flex-row gap-8 items-center sm:items-start mb-10">
-        <div className={`w-32 h-32 ${profile.bgElementClass} rounded-full flex shrink-0 items-center justify-center text-7xl z-10`}>
-          {profile.emoji}
-        </div>
+        {profile.imageUrl ? (
+          <img 
+            src={profile.imageUrl} 
+            alt={profile.name} 
+            className="w-32 h-32 sm:w-40 sm:h-40 rounded-full object-cover border-[4px] border-n-primary shrink-0 z-10 shadow-[0_10px_20px_rgba(0,0,0,0.1)]" 
+          />
+        ) : (
+          <div className={`w-32 h-32 sm:w-40 sm:h-40 ${profile.bgElementClass} rounded-full flex shrink-0 items-center justify-center text-7xl sm:text-8xl z-10 border-4 border-n-primary shadow-sm`}>
+            {profile.emoji}
+          </div>
+        )}
         <p className="text-[20px] leading-[1.6] opacity-80 text-n-text max-w-[500px]">
           {profile.description}
         </p>
@@ -241,7 +300,7 @@ function ResultScreen({
           onClick={onGetGift}
           className="w-full sm:w-auto px-10 py-4 bg-n-primary hover:scale-[1.02] active:scale-[0.98] text-white font-bold text-lg rounded-full transition-transform flex items-center justify-center gap-2"
         >
-          <span>Получить билет</span>
+          <span>Получить подарок</span>
           <ArrowRight className="w-5 h-5" />
         </button>
         <button
@@ -256,7 +315,77 @@ function ResultScreen({
   );
 }
 
-function GiftScreen({ onRestart }: { onRestart: () => void }) {
+function RouletteScreen({ onFinish }: { onFinish: (prize: string) => void }) {
+  const [spinning, setSpinning] = useState(false);
+  const [rotation, setRotation] = useState(0);
+
+  const segments = ['0%', '10%', '5%', '3%', '7%', '2%', '5%', '1%'];
+
+  const spin = () => {
+    if (spinning) return;
+    setSpinning(true);
+    const winIndex = Math.floor(Math.random() * segments.length);
+    const segmentAngle = 360 / segments.length;
+    const extraSpins = 5 * 360;
+    const targetAngle = extraSpins + (360 - winIndex * segmentAngle);
+    setRotation(targetAngle);
+
+    setTimeout(() => {
+      setSpinning(false);
+      onFinish(segments[winIndex]);
+    }, 5000);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 1.1 }}
+      className="bg-n-card rounded-[24px] p-8 sm:p-12 shadow-[0_10px_30px_rgba(0,0,0,0.05)] border-2 border-n-primary flex flex-col items-center text-center"
+    >
+      <h2 className="text-3xl sm:text-4xl font-serif font-black text-n-primary mb-2">
+        Колесо Фортуны
+      </h2>
+      <p className="text-n-text opacity-80 mb-8 max-w-sm">
+        Крути рулетку, чтобы узнать размер своей скидки на билет!
+      </p>
+
+      <div className="relative w-64 h-64 sm:w-80 sm:h-80 mb-8">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-4 w-0 h-0 border-l-[15px] border-l-transparent border-r-[15px] border-r-transparent border-t-[30px] border-n-accent drop-shadow-md z-20" />
+        <div className="w-full h-full rounded-full border-4 border-n-primary overflow-hidden relative shadow-[0_10px_30px_rgba(0,0,0,0.1)] bg-n-primary">
+          <motion.div
+            className="w-full h-full relative"
+            style={{
+              background: 'conic-gradient(from -22.5deg, #4A5D23 0deg 45deg, #F0F4E8 45deg 90deg, #4A5D23 90deg 135deg, #F0F4E8 135deg 180deg, #4A5D23 180deg 225deg, #F0F4E8 225deg 270deg, #4A5D23 270deg 315deg, #F0F4E8 315deg 360deg)'
+            }}
+            animate={{ rotate: rotation }}
+            transition={{ duration: 5, ease: [0.2, 0.8, 0.2, 1] }}
+          >
+            {segments.map((p, i) => (
+              <div
+                key={i}
+                className="absolute top-0 left-0 w-full h-full flex justify-center pt-6 sm:pt-8"
+                style={{ transform: `rotate(${i * 45}deg)`, color: i % 2 === 0 ? 'white' : '#4A5D23' }}
+              >
+                <span className="font-bold text-xl sm:text-2xl pt-2">{p}</span>
+              </div>
+            ))}
+          </motion.div>
+        </div>
+      </div>
+
+      <button
+        onClick={spin}
+        disabled={spinning}
+        className="w-full sm:w-auto px-12 py-4 bg-n-accent hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:scale-100 text-white font-bold text-xl rounded-full transition-all flex items-center justify-center gap-2 shadow-[0_5px_15px_rgba(210,105,30,0.4)] border-2 border-n-accent border-b-4 hover:border-b-2 hover:translate-y-[2px] disabled:border-b-4 disabled:translate-y-0"
+      >
+        <span>{spinning ? 'Крутим...' : 'Испытать удачу'}</span>
+      </button>
+    </motion.div>
+  );
+}
+
+function GiftScreen({ prize, onRestart }: { prize: string, onRestart: () => void }) {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -269,19 +398,31 @@ function GiftScreen({ onRestart }: { onRestart: () => void }) {
         <div className="absolute -top-5 -left-5 w-10 h-10 bg-n-bg rounded-full border-b-2 border-r-2 border-n-primary"></div>
         
         <div className="text-xs uppercase tracking-[1px] text-n-accent font-bold mb-4">
-          Ваш Подарок
+          Твой Выигрыш
         </div>
-        <h2 className="font-serif text-3xl sm:text-4xl font-bold text-n-primary mb-6">
-          Бесплатный вход в Динопарк
+        <h2 className="font-serif text-3xl sm:text-4xl font-bold text-n-primary mb-2">
+          {prize === '0%' ? 'Скидка 0%' : `Скидка ${prize} на билет`}
         </h2>
+        <p className="font-bold text-n-text mb-6">
+          {prize === '0%' ? 'Не повезло 😔 В следующий раз обязательно выиграешь!' : 'Поздравляем!'}
+        </p>
         
-        <div className="inline-block bg-n-promo border-2 border-dashed border-n-primary px-8 py-3 text-center font-mono text-2xl tracking-[2px] text-n-primary mb-6 rounded-lg">
-          DINO-7732-FREE
+        <div className="inline-block bg-n-promo border-2 border-dashed border-n-primary px-8 py-3 text-center font-mono text-xl sm:text-2xl tracking-[2px] text-n-primary mb-6 rounded-lg font-black">
+          {prize === '0%' ? 'DINO-TRY-AGAIN' : `DINO-SALE-${prize.replace('%', '')}`}
         </div>
         
-        <p className="text-sm text-n-text opacity-70">
-          Покажите этот код на кассе в Динополисе, чтобы получить свой билет. 
+        <p className="text-sm text-n-text opacity-70 mb-8">
+          {prize === '0%' ? 'Приходите в Динополис, у нас все равно классно!' : 'Покажите этот код на кассе в Динополисе или введите его на сайте, чтобы применить скидку.'}
         </p>
+
+        <a 
+          href="https://dinopolis.ru" 
+          target="_blank" 
+          rel="noreferrer"
+          className="w-full sm:w-auto px-10 py-4 bg-n-primary hover:scale-[1.02] active:scale-[0.98] text-white font-bold rounded-full transition-transform flex items-center justify-center gap-2"
+        >
+          Перейти на сайт ДИНОПОЛИСА
+        </a>
       </div>
 
       {/* Contacts Card */}
